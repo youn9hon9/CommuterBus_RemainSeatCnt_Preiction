@@ -87,14 +87,6 @@ ROUTE_IDS: list[str] = [
 python main.py --test
 ```
 
-### 디버깅 실행 (바로 1분마다 수집)
-
-응답 메시지의 상태를 바로 확인합니다.
-
-```powershell
-python main.py --test --debug
-```
-
 ### 운영 실행 (6시 30분 대기 후 수집)
 
 아침에 컴퓨터를 켜두고 할 일 하다가 등교하면, 자동으로 데이터도 수집하고 컴퓨터를 종료해주도록 설계하였습니다. (종료하지 않는다면, shutdown 옵션 제거) 실행 후 출근시간인 **오늘 6시 30분**까지 대기했다가, 6시 30분부터 1분마다 수집을 시작합니다. 노선 5개에 대해서 수집하면, 개발계정의 API 제한 횟수인 1000회를 소진하였을 때 9시 50분까지 200분의 데이터를 얻을 수 있습니다.
@@ -109,10 +101,10 @@ csv는 data 폴더 안에 저장
 
 현재까지 저장된 데이터 모두 내보내기
 ```powershell
-python exprot_csv.py
+python export_csv.py
 ```
 
 특정 기간의 데이터만 내보내기
 ```powershell
-python exprot_csv.py --startdate 20260301 --enddate 20260309
+python export_csv.py --startdate 20260301 --enddate 20260309
 ```
