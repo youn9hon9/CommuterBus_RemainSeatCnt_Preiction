@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-진입점: --mode에 따라 6:30(로컬) 대기 여부·한도 초과 시 PC 종료 여부를 구분.
+진입점: --mode에 따라 6:30(로컬) 대기·한도 초과 시 동작을 구분.
+런 모드는 한도 초과 후 다음날 같은 시각까지 대기하며 같은 프로세스에서 재개.
 """
 
 import argparse
@@ -9,7 +10,7 @@ import logging
 import sys
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # .env 로드 (config 임포트 전에 경로만 지정 가능하므로 config에서 load_dotenv 함)
 import config
@@ -36,6 +37,29 @@ def wait_until_start_time() -> None:
     delta = (start - now).total_seconds()
     logger.info("%s 까지 %.0f초 대기합니다.", start.isoformat(), delta)
     time.sleep(delta)
+
+
+def wait_until_next_scheduled_start() -> None:
+    """다음 수집 시작 시각(config의 시·분, 로컬)까지 대기. 런 모드에서 한도 초과 후 재개용."""
+    now = datetime.now()
+    today_start = now.replace(
+        hour=config.PRODUCTION_START_HOUR,
+        minute=config.PRODUCTION_START_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if now < today_start:
+        target = today_start
+    else:
+        target = today_start + timedelta(days=1)
+    delta = (target - datetime.now()).total_seconds()
+    if delta > 0:
+        logger.info(
+            "다음 수집 시작(%s, 로컬)까지 약 %.0f초 대기합니다.",
+            target.isoformat(timespec="seconds"),
+            delta,
+        )
+        time.sleep(delta)
 
 
 async def run_once(key_rotator: ApiKeyRotator) -> str | None:
@@ -73,7 +97,11 @@ async def run_once(key_rotator: ApiKeyRotator) -> str | None:
     return None
 
 
-async def main_async(skip_wait_until_start: bool, shutdown_on_quota: bool) -> int:
+async def main_async(
+    skip_wait_until_start: bool,
+    shutdown_on_quota: bool,
+    resume_after_quota_next_day: bool,
+) -> int:
     """비동기 메인: 1분 간격 수집. skip_wait_until_start면 6:30 대기 생략."""
     if not skip_wait_until_start:
         wait_until_start_time()
@@ -99,6 +127,15 @@ async def main_async(skip_wait_until_start: bool, shutdown_on_quota: bool) -> in
     while True:
         reason = await run_once(key_rotator)
         if reason == "quota":
+            if shutdown_on_quota:
+                exit_reason = "quota"
+                break
+            if resume_after_quota_next_day:
+                logger.info(
+                    "런 모드: 금일 한도 초과로 수집 중단 후, 다음 예정 시작 시각까지 대기합니다."
+                )
+                wait_until_next_scheduled_start()
+                continue
             exit_reason = "quota"
             break
         if reason == "failure":
@@ -125,7 +162,11 @@ def main() -> None:
         "--mode",
         choices=("test", "prod", "run"),
         required=True,
-        help="test=즉시 수집, prod=6:30까지 대기·한도 초과 시 PC 종료, run=6:30까지 대기·종료 없음",
+        help=(
+            "test=즉시 수집·한도 초과 시 종료, "
+            "prod=6:30까지 대기·한도 초과 시 PC 종료, "
+            "run=6:30까지 대기·한도 초과 시 다음날 6:30까지 대기 후 재개"
+        ),
     )
     parser.add_argument("--debug", action="store_true", help="DEBUG 로그 출력 (API 응답 상세 등)")
     args = parser.parse_args()
@@ -138,6 +179,7 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    resume_after_quota = False
     if args.mode == "test":
         skip_wait = True
         shutdown_on_quota = False
@@ -149,9 +191,14 @@ def main() -> None:
     else:
         skip_wait = False
         shutdown_on_quota = False
-        logger.info("런 모드: 6:30까지 대기 후 수집, PC 종료 없음.")
+        resume_after_quota = True
+        logger.info(
+            "런 모드: 6:30까지 대기 후 수집, PC 종료 없음. 한도 초과 시 다음날 같은 시각까지 대기 후 재개."
+        )
 
-    exit_code = asyncio.run(main_async(skip_wait, shutdown_on_quota))
+    exit_code = asyncio.run(
+        main_async(skip_wait, shutdown_on_quota, resume_after_quota)
+    )
     sys.exit(exit_code)
 
 

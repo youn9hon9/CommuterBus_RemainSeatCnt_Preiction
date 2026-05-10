@@ -27,20 +27,26 @@ pip install -r requirements.txt
 
 프로젝트 루트에 `.env` 파일을 만들고 아래 항목을 설정합니다.
 
-| 변수 | 설명 |
-|------|------|
-| `API_KEY` | 공공데이터 API 인증키. 복수 키는 쉼표로 구분해 순환 사용 가능. |
-| `DB_URL` | TimescaleDB 연결 문자열. 예: `postgresql://postgres:password@localhost:5432/busdb` |
-| `API_FORMAT` | (선택) 응답 형식. `json` 또는 `xml`. 기본값: `json` |
+
+| 변수           | 설명                                                                           |
+| ------------ | ---------------------------------------------------------------------------- |
+| `API_KEY`    | 공공데이터 API 인증키. 복수 키는 쉼표로 구분해 순환 사용 가능.                                       |
+| `DB_URL`     | TimescaleDB 연결 문자열. 예: `postgresql://postgres:password@localhost:5432/busdb` |
+| `API_FORMAT` | (선택) 응답 형식. `json` 또는 `xml`. 기본값: `json`                                     |
+
 
 `.env.example`을 복사해 사용할 수 있습니다.
 
 ## 3. TimescaleDB 실행 (Docker)
+
 docker 설치 후, 터미널에서 Docker가 잘 작동하는지 확인
+
 ```
 docker --version
 ```
+
 로컬에서 DB를 Docker로 띄울 때 예시는 아래와 같습니다.
+
 ```powershell
 docker run -d `
   --name timescaledb `
@@ -49,9 +55,11 @@ docker run -d `
   -e POSTGRES_DB=your_db_name `
   timescale/timescaledb:latest-pg16
 ```
+
 - **이미지**: `timescale/timescaledb` (최신은 `timescale/timescaledb:latest-pg16` 등)
 - **DB정보**your_password, your_db_name은 자유롭게 설정하세요.
 - 이 정보는 .env 파일에도 아래와 같이 동일하게 등록해야 합니다.
+
 ```
 DB_URL=postgresql://postgres:your_password@localhost:5432/your_db_name
 ```
@@ -67,7 +75,7 @@ python init_db.py
 ## 5. 수집 대상 노선 설정
 
 `config.py`의 `ROUTE_IDS` 리스트에 사용할 노선ID를 넣습니다.
-노선ID는 https://www.data.go.kr/data/15080662/openapi.do#/ 에서 확인할 수 있습니다.
+노선ID는 [https://www.data.go.kr/data/15080662/openapi.do#/](https://www.data.go.kr/data/15080662/openapi.do#/) 에서 확인할 수 있습니다.
 
 ```python
 ROUTE_IDS: list[str] = [
@@ -81,11 +89,13 @@ ROUTE_IDS: list[str] = [
 
 `--mode`는 필수입니다.
 
-| 모드 | 설명 |
-|------|------|
-| `test` | **6:30 대기 없이** 바로 1분 간격 수집을 시작합니다. |
-| `prod` | **오늘 6시 30분**까지 대기한 뒤 수집을 시작하고, **API 한도 초과로 종료될 때만** `config.SHUTDOWN_DELAY_SEC` 대기 후 PC를 끕니다. |
-| `run` | **6시 30분**까지 대기한 뒤 수집만 하고, PC는 끄지 않습니다. |
+
+| 모드     | 설명                                                                                              |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| `test` | 즉시 1분 간격 수집을 시작합니다.                                                              |
+| `prod` | 실행 시점에서 가장 가까운 6시 30분까지 대기한 뒤 수집을 시작하고, API 한도 초과 시 **10분 뒤 자동으로 PC를 종료합니다.** |
+| `run`  | 실행 시점에서 가장 가까운 6시 30분까지 대기한 뒤 **PC를 종료하지 않고** 다음 날 6시 30분까지 대기합니다. |
+
 
 ```powershell
 python main.py --mode test
@@ -96,17 +106,20 @@ python main.py --mode run
 아침에 PC를 켜두고 자동 수집 후 한도 소진 시 종료까지 원하면 `prod`를 쓰면 됩니다. 노선 5개에 대해서 수집하면, 개발계정의 API 제한 횟수인 1000회를 소진하였을 때 9시 50분까지 200분의 데이터를 얻을 수 있습니다.
 
 ## db 내용 csv로 내보내기
-쿼리를 통해 필요한 정보만 조회하는 것이 아니라, 간단하게 csv로 보고 싶을 때 사용
-csv는 data 폴더 안에 저장
+
+쿼리를 통해 필요한 정보만 조회하는 것이 아니라, 간단하게 csv로 보고 싶을 때 사용 현재 csv는 data 폴더 안에 월 별로 저장하여 살펴보는 중
+
+
 
 현재까지 저장된 데이터 모두 내보내기
+
 ```powershell
 python export_csv.py
 ```
 
 특정 기간의 데이터만 내보내기
+
 ```powershell
 python export_csv.py --startdate 20260301 --enddate 20260309
 ```
 
-python export_csv.py --startdate 202603020 --enddate 20260409
