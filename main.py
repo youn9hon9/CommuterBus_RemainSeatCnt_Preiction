@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-진입점: 테스트 모드(--test)는 즉시 1분 간격 수집, 운영 모드는 6시 30분까지 대기 후 수집.
+진입점: --mode에 따라 6:30(로컬) 대기 여부·한도 초과 시 PC 종료 여부를 구분.
 """
 
 import argparse
@@ -9,7 +9,7 @@ import logging
 import sys
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 # .env 로드 (config 임포트 전에 경로만 지정 가능하므로 config에서 load_dotenv 함)
 import config
@@ -21,7 +21,7 @@ from db import init_db, get_connection, save_locations
 
 
 def wait_until_start_time() -> None:
-    """운영 모드: 오늘 6시 30분(로컬)까지 대기."""
+    """오늘 6시 30분(로컬)까지 대기."""
     now = datetime.now()
     start = now.replace(
         hour=config.PRODUCTION_START_HOUR,
@@ -34,7 +34,7 @@ def wait_until_start_time() -> None:
         # 작업 스케줄러가 매일 6:30에 실행하므로, 실행 시점이 6:30 이후일 수 없음. 만약 수동 실행이면 즉시 시작.
         return
     delta = (start - now).total_seconds()
-    logger.info("운영 모드: %s 까지 %.0f초 대기합니다.", start.isoformat(), delta)
+    logger.info("%s 까지 %.0f초 대기합니다.", start.isoformat(), delta)
     time.sleep(delta)
 
 
@@ -73,10 +73,9 @@ async def run_once(key_rotator: ApiKeyRotator) -> str | None:
     return None
 
 
-async def main_async(test_mode: bool, do_shutdown: bool) -> int:
-    """비동기 메인: 테스트면 즉시, 아니면 6:30 대기 후 1분마다 수집."""
-    # 운영 모드일 때만 6:30 대기
-    if not test_mode:
+async def main_async(skip_wait_until_start: bool, shutdown_on_quota: bool) -> int:
+    """비동기 메인: 1분 간격 수집. skip_wait_until_start면 6:30 대기 생략."""
+    if not skip_wait_until_start:
         wait_until_start_time()
 
     keys = config.get_api_keys()
@@ -107,10 +106,10 @@ async def main_async(test_mode: bool, do_shutdown: bool) -> int:
             break
         await asyncio.sleep(config.COLLECT_INTERVAL_SEC)
 
-    # 수집 종료 후 10분 대기 후 PC 종료 옵션
-    if do_shutdown:
+    # 운영 모드: API 한도 초과로만 PC 종료
+    if shutdown_on_quota and exit_reason == "quota":
         delay = config.SHUTDOWN_DELAY_SEC
-        logger.info("수집 종료. %d초 후 PC를 종료합니다.", delay)
+        logger.info("수집 종료(한도 초과). %d초 후 PC를 종료합니다.", delay)
         time.sleep(delay)
         if sys.platform == "win32":
             subprocess.run(["shutdown", "/s", "/t", "0"], check=False)
@@ -122,8 +121,12 @@ async def main_async(test_mode: bool, do_shutdown: bool) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="버스 위치 수집 (1분 간격)")
-    parser.add_argument("--test", action="store_true", help="테스트 모드: 즉시 1분 간격 수집 시작")
-    parser.add_argument("--shutdown", action="store_true", help="수집 종료 후 10분 대기 후 PC 종료")
+    parser.add_argument(
+        "--mode",
+        choices=("test", "prod", "run"),
+        required=True,
+        help="test=즉시 수집, prod=6:30까지 대기·한도 초과 시 PC 종료, run=6:30까지 대기·종료 없음",
+    )
     parser.add_argument("--debug", action="store_true", help="DEBUG 로그 출력 (API 응답 상세 등)")
     args = parser.parse_args()
 
@@ -135,11 +138,20 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # 테스트 모드 미지정 시 운영 모드(6:30 대기)
-    test_mode = args.test
-    do_shutdown = args.shutdown
+    if args.mode == "test":
+        skip_wait = True
+        shutdown_on_quota = False
+        logger.info("테스트 모드: 6:30 대기 없이 즉시 수집합니다.")
+    elif args.mode == "prod":
+        skip_wait = False
+        shutdown_on_quota = True
+        logger.info("운영 모드: 6:30까지 대기 후 수집, 한도 초과 시 PC 종료.")
+    else:
+        skip_wait = False
+        shutdown_on_quota = False
+        logger.info("런 모드: 6:30까지 대기 후 수집, PC 종료 없음.")
 
-    exit_code = asyncio.run(main_async(test_mode=test_mode, do_shutdown=do_shutdown))
+    exit_code = asyncio.run(main_async(skip_wait, shutdown_on_quota))
     sys.exit(exit_code)
 
 
