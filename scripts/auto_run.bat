@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 if not defined VIRTUAL_ENV (
   if exist .venv\Scripts\activate.bat (

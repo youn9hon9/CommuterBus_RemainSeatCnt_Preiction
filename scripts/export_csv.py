@@ -3,9 +3,9 @@
 버스 위치 DB 데이터를 CSV로 내보내기.
 
 사용법:
-  python export_csv.py
-  python export_csv.py --startdate 20260301 --enddate 20260309
-  python export_csv.py --limit 1000
+  python scripts/export_csv.py
+  python scripts/export_csv.py --startdate 20260301 --enddate 20260309
+  python scripts/export_csv.py --limit 1000
 """
 
 import argparse
@@ -17,9 +17,12 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from db import TABLE_NAME, get_connection
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = PROJECT_ROOT / "data"
 KST = ZoneInfo("Asia/Seoul")
 
 

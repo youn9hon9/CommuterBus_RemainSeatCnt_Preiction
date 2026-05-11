@@ -2,7 +2,12 @@
 """DB 테이블 생성(초기화) 전용. 수집기 실행 없이 테이블만 만들 때 사용."""
 
 import asyncio
-import config
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from db import TABLE_NAME, get_connection, init_db
 
 
